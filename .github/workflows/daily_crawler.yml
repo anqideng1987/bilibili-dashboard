@@ -30,8 +30,8 @@ jobs:
 
       - name: 运行数据采集脚本
         run: |
-          if [ -f "bili_data.py" ]; then
-            python bili_data.py
+          if [ -f "app.py" ]; then
+            python app.py
           elif [ -f "bili_report_generator.py" ]; then
             python bili_report_generator.py
           elif [ -f "app.py" ]; then
