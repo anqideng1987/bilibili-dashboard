@@ -1,8 +1,8 @@
 import os
 import time
-import requests
 import pandas as pd
 from datetime import datetime
+from curl_cffi import requests
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 BV_FILE = os.path.join(BASE_DIR, "bv_list.txt")
@@ -16,10 +16,8 @@ def load_bv_list():
     with open(BV_FILE, "r", encoding="utf-8") as f:
         return [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
-def fetch_bilibili_api(bvid, sessdata=""):
-    url = "https://api.bilibili.com/x/web-interface/view"
-    params = {"bvid": bvid}
-    
+def fetch_bilibili_api(session, bvid, sessdata=""):
+    url = f"https://api.bilibili.com/x/web-interface/view?bvid={bvid}"
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Referer": f"https://www.bilibili.com/video/{bvid}",
@@ -29,7 +27,7 @@ def fetch_bilibili_api(bvid, sessdata=""):
     }
 
     try:
-        response = requests.get(url, params=params, headers=headers, timeout=10)
+        response = session.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
             res_json = response.json()
             if res_json.get("code") == 0:
@@ -74,18 +72,21 @@ def fetch_bilibili_api(bvid, sessdata=""):
     }
 
 def run_once():
-    print(f"🚀 [静默 API 模式] 开始采集数据: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"🚀 [curl_cffi 模拟 Chrome] 开始采集数据: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     bvs = load_bv_list()
     if not bvs:
         print("❌ BV 列表为空，退出。")
         return
 
+    # 初始化支持 TLS 指纹伪装的 Session
+    session = requests.Session(impersonate="chrome124")
     data_list = []
+    
     for bvid in bvs:
         print(f"正在抓取 API: {bvid} ...")
-        item = fetch_bilibili_api(bvid, SESSDATA)
+        item = fetch_bilibili_api(session, bvid, SESSDATA)
         data_list.append(item)
-        time.sleep(1)
+        time.sleep(0.8)
 
     df = pd.DataFrame(data_list)
     if not df.empty:
