@@ -26,7 +26,6 @@ def get_bilibili_data(bv_list):
     co.set_argument('--disable-dev-shm-usage')
     co.set_user_agent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36')
 
-    # 自动识别 Linux 云端 Chrome 安装路径
     chrome_paths = ['/usr/bin/google-chrome', '/usr/bin/chromium-browser', '/usr/bin/chromium']
     for cp in chrome_paths:
         if os.path.exists(cp):
