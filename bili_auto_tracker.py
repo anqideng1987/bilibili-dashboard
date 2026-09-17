@@ -7,6 +7,8 @@ from datetime import datetime
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 BV_FILE = os.path.join(BASE_DIR, "bv_list.txt")
 
+SESSDATA = os.environ.get("SESSDATA", "")
+
 def load_bv_list():
     if not os.path.exists(BV_FILE):
         print(f"❌ 找不到 {BV_FILE} 文件")
@@ -14,30 +16,56 @@ def load_bv_list():
     with open(BV_FILE, "r", encoding="utf-8") as f:
         return [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
-def fetch_bilibili_data(bvid):
-    # 使用包含完整 view 和 stat 的 detail 聚合接口
-    url = "https://api.bilibili.com/x/web-interface/view/detail"
-    params = {"bvid": bvid}
+def get_visitor_session():
+    """初始化包含合法 buivid3 Cookie 的 Session"""
+    session = requests.Session()
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Referer": "https://www.bilibili.com/",
-        "Accept": "application/json, text/plain, */*"
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"
     }
+    session.headers.update(headers)
+
+    # 1. 如果有配置 SESSDATA，直接设置
+    if SESSDATA:
+        session.cookies.set("SESSDATA", SESSDATA.strip(), domain=".bilibili.com")
+        return session
+
+    # 2. 否则通过 SPI 接口申请游客 buivid3 Cookie
+    try:
+        spi_url = "https://api.bilibili.com/x/frontend/finger/spi"
+        resp = session.get(spi_url, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json().get("data", {})
+            b_3 = data.get("b_3", "")
+            b_4 = data.get("b_4", "")
+            if b_3:
+                session.cookies.set("buivid3", b_3, domain=".bilibili.com")
+            if b_4:
+                session.cookies.set("buivid4", b_4, domain=".bilibili.com")
+    except Exception as e:
+        print(f"⚠️ 获取 SPI Cookie 异常: {e}")
+
+    return session
+
+def fetch_bilibili_data(session, bvid):
+    url = "https://api.bilibili.com/x/web-interface/view"
+    params = {"bvid": bvid}
 
     try:
-        res = requests.get(url, params=params, headers=headers, timeout=10)
+        res = session.get(url, params=params, timeout=10)
         if res.status_code == 200:
             res_json = res.json()
             if res_json.get("code") == 0:
                 data = res_json.get("data", {})
-                view_data = data.get("view", {})
-                stat = view_data.get("stat", {})
-                owner = view_data.get("owner", {})
+                stat = data.get("stat", {})
+                owner = data.get("owner", {})
 
                 return {
                     "采集时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "BV号": bvid,
-                    "标题": view_data.get("title", ""),
+                    "标题": data.get("title", ""),
                     "UP主": owner.get("name", ""),
                     "播放量": stat.get("view", 0),
                     "弹幕数": stat.get("danmaku", 0),
@@ -71,18 +99,20 @@ def fetch_bilibili_data(bvid):
     }
 
 def run_once():
-    print(f"🚀 开始采集数据: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"🚀 [Cookie 注入模式] 开始采集数据: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     bvs = load_bv_list()
     if not bvs:
         print("❌ BV 列表为空，退出。")
         return
 
+    session = get_visitor_session()
     data_list = []
+
     for bvid in bvs:
         print(f"正在抓取: {bvid} ...")
-        item = fetch_bilibili_data(bvid)
+        item = fetch_bilibili_data(session, bvid)
         data_list.append(item)
-        time.sleep(0.5)
+        time.sleep(1.2)
 
     df = pd.DataFrame(data_list)
     if not df.empty:
