@@ -110,7 +110,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 💡 提前定义渲染视频卡片的函数，确保作用域正确
+# 💡 提前定义渲染视频卡片的函数
 def render_video_card(idx, row, target_views):
     """渲染单张带 10w 里程碑节点的视频紧凑卡片"""
     bvid = str(row.get("BV号", "未知BV"))
@@ -118,7 +118,6 @@ def render_video_card(idx, row, target_views):
     views = int(row.get("总播放量", 0))
     owner = str(row.get("UP主", "未知UP主"))
     
-    progress = min(views / target_views, 1.0)
     percent = min(round((views / target_views) * 100, 2), 100.0)
     
     rank_icon = "🥇" if idx == 0 else ("🥈" if idx == 1 else ("🥉" if idx == 2 else f"#{idx+1}"))
@@ -146,9 +145,10 @@ def render_video_card(idx, row, target_views):
             </div>
             <div class="milestone-labels">
                 <span>0w</span>
-                <span>30w</span>
+                <span>20w</span>
+                <span>40w</span>
                 <span>60w</span>
-                <span>90w</span>
+                <span>80w</span>
                 <span>100w</span>
             </div>
         </div>
