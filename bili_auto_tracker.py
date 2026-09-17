@@ -1,13 +1,11 @@
 import os
 import time
+import requests
 import pandas as pd
 from datetime import datetime
-from curl_cffi import requests
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 BV_FILE = os.path.join(BASE_DIR, "bv_list.txt")
-
-SESSDATA = os.environ.get("SESSDATA", "")
 
 def load_bv_list():
     if not os.path.exists(BV_FILE):
@@ -16,43 +14,48 @@ def load_bv_list():
     with open(BV_FILE, "r", encoding="utf-8") as f:
         return [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
-def fetch_bilibili_api(session, bvid, sessdata=""):
-    url = f"https://api.bilibili.com/x/web-interface/view?bvid={bvid}"
+def fetch_bilibili_app_api(bvid):
+    # 使用 B 站官方App/小程序数据接口 (无 412 风控，返回格式完整)
+    url = f"https://api.bilibili.com/x/web-interface/archive/stat?bvid={bvid}"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Referer": f"https://www.bilibili.com/video/{bvid}",
-        "Origin": "https://www.bilibili.com",
-        "Accept": "application/json, text/plain, */*",
-        "Cookie": f"SESSDATA={sessdata.strip()};" if sessdata else ""
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 BiliApp/76800100"
     }
 
     try:
-        response = session.get(url, headers=headers, timeout=10)
-        if response.status_code == 200:
-            res_json = response.json()
+        # 先抓取视频核心数据 (播放量、弹幕、点赞、投币、收藏、分享等)
+        res = requests.get(url, headers=headers, timeout=10)
+        if res.status_code == 200:
+            res_json = res.json()
             if res_json.get("code") == 0:
                 data = res_json.get("data", {})
-                stat = data.get("stat", {})
-                owner = data.get("owner", {})
                 
+                # 补充抓取标题与 UP 主信息
+                detail_url = f"https://api.bilibili.com/x/web-interface/view/detail?bvid={bvid}"
+                detail_res = requests.get(detail_url, headers=headers, timeout=10)
+                title, owner_name = "-", "-"
+                if detail_res.status_code == 200 and detail_res.json().get("code") == 0:
+                    view_data = detail_res.json().get("data", {}).get("view", {})
+                    title = view_data.get("title", "-")
+                    owner_name = view_data.get("owner", {}).get("name", "-")
+
                 return {
                     "采集时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "BV号": bvid,
-                    "标题": data.get("title", ""),
-                    "UP主": owner.get("name", ""),
-                    "播放量": stat.get("view", 0),
-                    "弹幕数": stat.get("danmaku", 0),
-                    "回复数": stat.get("reply", 0),
-                    "收藏数": stat.get("favorite", 0),
-                    "投币数": stat.get("coin", 0),
-                    "点赞数": stat.get("like", 0),
-                    "分享数": stat.get("share", 0),
+                    "标题": title,
+                    "UP主": owner_name,
+                    "播放量": data.get("view", 0),
+                    "弹幕数": data.get("danmaku", 0),
+                    "回复数": data.get("reply", 0),
+                    "收藏数": data.get("favorite", 0),
+                    "投币数": data.get("coin", 0),
+                    "点赞数": data.get("like", 0),
+                    "分享数": data.get("share", 0),
                     "状态": "成功"
                 }
             else:
-                print(f"⚠️ [{bvid}] API错误: {res_json.get('message')}")
+                print(f"⚠️ [{bvid}] API 错误: {res_json.get('message')}")
         else:
-            print(f"⚠️ [{bvid}] HTTP状态码异常: {response.status_code}")
+            print(f"⚠️ [{bvid}] HTTP状态码异常: {res.status_code}")
     except Exception as e:
         print(f"❌ [{bvid}] 请求异常: {e}")
 
@@ -72,21 +75,18 @@ def fetch_bilibili_api(session, bvid, sessdata=""):
     }
 
 def run_once():
-    print(f"🚀 [curl_cffi 模拟 Chrome] 开始采集数据: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"🚀 [App Stat 接口] 开始采集数据: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     bvs = load_bv_list()
     if not bvs:
         print("❌ BV 列表为空，退出。")
         return
 
-    # 初始化支持 TLS 指纹伪装的 Session
-    session = requests.Session(impersonate="chrome124")
     data_list = []
-    
     for bvid in bvs:
-        print(f"正在抓取 API: {bvid} ...")
-        item = fetch_bilibili_api(session, bvid, SESSDATA)
+        print(f"正在抓取: {bvid} ...")
+        item = fetch_bilibili_app_api(bvid)
         data_list.append(item)
-        time.sleep(0.8)
+        time.sleep(0.5)
 
     df = pd.DataFrame(data_list)
     if not df.empty:
