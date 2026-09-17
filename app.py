@@ -122,7 +122,7 @@ def render_video_card(idx, row, target_views):
     
     rank_icon = "🥇" if idx == 0 else ("🥈" if idx == 1 else ("🥉" if idx == 2 else f"#{idx+1}"))
     
-    st.markdown(f"""
+    st.markdown(f
         <div class="bili-card">
             <div class="video-title" title="{title}">{rank_icon} {title}</div>
             <div>
@@ -152,15 +152,15 @@ def render_video_card(idx, row, target_views):
                 <span>100w</span>
             </div>
         </div>
-    """, unsafe_allow_html=True)
+    , unsafe_allow_html=True)
 
 
-st.markdown("""
+st.markdown(
     <div class="bili-header">
         <div class="bili-title">🐰 杨百万B站数据看板</div>
         <div class="bili-subtitle">✨ 每 10w 播放量一个里程碑节点 | 冲刺 100w 目标</div>
     </div>
-""", unsafe_allow_html=True)
+, unsafe_allow_html=True)
 
 # 获取所有 xlsx / xls 文件
 all_excel_files = glob.glob("*.xlsx") + glob.glob("*.xls")
