@@ -12,7 +12,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# 注入粉白色主题样式
+# 注入粉白色主题、每 10w 刻度节点、粉色渐变进度条和小兔子跟随动画的精美样式
 st.markdown("""
     <style>
     .stApp { background-color: #FFFDFD; }
@@ -36,46 +36,129 @@ st.markdown("""
         margin-bottom: 16px;
         box-shadow: 0 4px 10px rgba(255, 182, 193, 0.12);
     }
+    .video-title { 
+        font-size: 15px; 
+        font-weight: 700; 
+        color: #333333; 
+        margin-bottom: 6px; 
+        white-space: nowrap; 
+        overflow: hidden; 
+        text-overflow: ellipsis; 
+    }
+    .bv-badge {
+        background-color: #FFEAEF; color: #D46A92;
+        padding: 2px 8px; border-radius: 10px;
+        font-size: 11px; font-weight: 600; display: inline-block; margin-bottom: 8px;
+    }
+    .stat-box { background: #FFFFFF; border-radius: 10px; padding: 6px 10px; text-align: center; border: 1px solid #FFE4ED; }
+    .stat-label { font-size: 11px; color: #757575; margin-bottom: 2px; }
+    .stat-value { font-size: 16px; font-weight: 800; color: #D46A92; }
+
+    /* 每 10w 播放量一个节点的里程碑粉色渐变进度条容器 */
+    .milestone-container {
+        position: relative;
+        width: 100%;
+        background-color: #FCE4EC;
+        border-radius: 12px;
+        height: 16px;
+        margin: 16px 0 4px 0;
+    }
+    .milestone-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #FFB6C1, #FF69B4);
+        border-radius: 12px;
+        transition: width 0.5s ease;
+    }
+    .bunny-runner {
+        position: absolute;
+        top: -22px;
+        transform: translateX(-50%);
+        font-size: 18px;
+        animation: bunny-bounce 0.6s infinite alternate;
+    }
+    @keyframes bunny-bounce {
+        from { transform: translateX(-50%) translateY(0); }
+        to { transform: translateX(-50%) translateY(-3px); }
+    }
+    .milestone-ticks {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: space-between;
+        pointer-events: none;
+        padding: 0 2px;
+    }
+    .tick {
+        width: 1px;
+        height: 100%;
+        background-color: rgba(255, 255, 255, 0.8);
+    }
+    .milestone-labels {
+        display: flex;
+        justify-content: space-between;
+        font-size: 9px;
+        color: #888888;
+        padding: 0 2px;
+        margin-top: 2px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
-st.markdown("""
-    <div class="bili-header">
-        <div class="bili-title">🐰 杨百万B站数据看板</div>
-        <div class="bili-subtitle">✨ 双列紧凑网格布局 | 冲刺 100w 目标</div>
-    </div>
-""", unsafe_allow_html=True)
-
-# 渲染卡片函数（使用原生组件确保完美渲染）
+# 渲染精美视频卡片（包含粉色渐变进度条、小兔子跟随、10w 刻度节点）
 def render_video_card(idx, row, target_views):
     bvid = str(row.get("BV号", "未知BV"))
     title = str(row.get("标题", "未知标题"))
     views = int(row.get("总播放量", 0))
     owner = str(row.get("UP主", "未知UP主"))
     
-    percent = min(views / target_views, 1.0)
-    percent_str = f"{round(percent * 100, 2)}%"
+    percent_val = min(round((views / target_views) * 100, 2), 100.0)
     rank_icon = "🥇" if idx == 0 else ("🥈" if idx == 1 else ("🥉" if idx == 2 else f"#{idx+1}"))
     
-    with st.container():
-        st.markdown(f"""
-            <div class="bili-card">
-                <div style="font-size: 15px; font-weight: 700; color: #333333; margin-bottom: 4px;">{rank_icon} {title}</div>
-                <div style="font-size: 12px; color: #D46A92; margin-bottom: 8px;">
-                    <b>BV号:</b> <a href="https://www.bilibili.com/video/{bvid}" target="_blank" style="color: #D46A92;">{bvid}</a> &nbsp;|&nbsp; <b>UP主:</b> {owner}
+    card_html = f"""
+        <div class="bili-card">
+            <div class="video-title" title="{title}">{rank_icon} {title}</div>
+            <div>
+                <span class="bv-badge"><a href="https://www.bilibili.com/video/{bvid}" target="_blank" style="color: #D46A92; text-decoration: none;">{bvid}</a></span>
+                <span style="font-size:12px; color:#757575; margin-left:6px;">UP主：{owner}</span>
+            </div>
+            
+            <div style="display: flex; gap: 8px; margin-top: 6px;">
+                <div style="flex: 1;" class="stat-box">
+                    <div class="stat-label">当前播放</div>
+                    <div class="stat-value">{views:,}</div>
+                </div>
+                <div style="flex: 1;" class="stat-box">
+                    <div class="stat-label">冲刺进度</div>
+                    <div class="stat-value">{percent_val}%</div>
                 </div>
             </div>
-        """, unsafe_allow_html=True)
-        
-        sc1, sc2 = st.columns(2)
-        sc1.metric("当前播放", f"{views:,}")
-        sc2.metric("冲刺进度", percent_str)
-        
-        # 带小兔子的进度条
-        st.markdown(f"<div style='font-size: 12px; color: #D46A92; margin-bottom: -15px;'>🐰 冲刺进度：{percent_str} (目标 100w)</div>", unsafe_allow_html=True)
-        st.progress(percent)
-        st.write("")
+            
+            <!-- 每 10w 播放量一个节点的粉色渐变进度条与小兔子跟随 -->
+            <div class="milestone-container">
+                <div class="milestone-bar" style="width: {percent_val}%;"></div>
+                <div class="milestone-ticks">
+                    <div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div>
+                    <div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div>
+                </div>
+                <div class="bunny-runner" style="left: {max(percent_val, 3.0)}%;">🐰</div>
+            </div>
+            <div class="milestone-labels">
+                <span>0w</span><span>20w</span><span>40w</span><span>60w</span><span>80w</span><span>100w</span>
+            </div>
+        </div>
+    """
+    st.markdown(card_html, unsafe_allow_html=True)
 
+
+st.markdown("""
+    <div class="bili-header">
+        <div class="bili-title">🐰 杨百万B站数据看板</div>
+        <div class="bili-subtitle">✨ 双列紧凑网格布局 | 每 10w 播放量一个里程碑节点 | 冲刺 100w 目标</div>
+    </div>
+""", unsafe_allow_html=True)
 
 # 获取所有 xlsx / xls 文件
 all_excel_files = glob.glob("*.xlsx") + glob.glob("*.xls")
@@ -116,9 +199,9 @@ else:
                 
                 c1, c2 = st.columns(2)
                 with c1:
-                    st.metric("📌 监控视频总数", f"{total_videos} 个")
+                    st.markdown(f'<div class="stat-box"><div class="stat-label">📌 监控视频总数</div><div class="stat-value" style="font-size:18px;">{total_videos} 个</div></div>', unsafe_allow_html=True)
                 with c2:
-                    st.metric("🔥 累计总播放量", f"{total_views:,}")
+                    st.markdown(f'<div class="stat-box"><div class="stat-label">🔥 累计总播放量</div><div class="stat-value" style="font-size:18px;">{total_views:,}</div></div>', unsafe_allow_html=True)
                 
                 st.write("")
 
