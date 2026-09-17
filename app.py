@@ -5,14 +5,14 @@ import os
 import re
 import datetime
 
-# 页面基础配置，看板名称：杨百万B站数据看板
+# 页面基础配置
 st.set_page_config(
     page_title="杨百万B站数据看板",
     page_icon="🐰",
     layout="wide"
 )
 
-# 注入粉白色主题、双列紧凑卡片网格以及带有 10w 里程碑节点的兔子跑动进度条动画样式（使用普通字符串，绝对不会有语法冲突）
+# 注入粉白色主题、紧凑网格卡片以及小兔子跑动动画样式
 st.markdown("""
     <style>
     .stApp { background-color: #FFFDFD; }
@@ -28,7 +28,6 @@ st.markdown("""
     .bili-title { font-size: 28px; font-weight: 800; margin: 0; }
     .bili-subtitle { font-size: 13px; opacity: 0.95; margin-top: 6px; }
     
-    /* 紧凑粉嫩卡片样式 */
     .bili-card {
         background-color: #FFF0F5;
         border: 1px solid #FFD1DC;
@@ -109,7 +108,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 💡 专门渲染带有小兔子和 10w 里程碑节点的精美卡片函数
+# 渲染卡片函数（使用规范的 f-string 避免大括号解析报错）
 def render_video_card(idx, row, target_views):
     bvid = str(row.get("BV号", "未知BV"))
     title = str(row.get("标题", "未知标题"))
