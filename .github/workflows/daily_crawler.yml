@@ -11,12 +11,17 @@ jobs:
 
     steps:
       - name: 检出仓库代码
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: 设置 Python 环境
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+
+      - name: 安装 Chrome 浏览器
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
 
       - name: 安装依赖包
         run: |
@@ -25,7 +30,15 @@ jobs:
 
       - name: 运行数据采集脚本
         run: |
-          python app.py
+          if [ -f "bili_data.py" ]; then
+            python bili_data.py
+          elif [ -f "bili_report_generator.py" ]; then
+            python bili_report_generator.py
+          elif [ -f "app.py" ]; then
+            python app.py
+          else
+            echo "未找到脚本文件！" && exit 1
+          fi
 
       - name: 自动提交并推送更新后的 Excel 文件
         run: |
