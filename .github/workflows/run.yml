@@ -18,10 +18,10 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: 安装 Google Chrome 浏览器
+      - name: 安装 Google Chrome 浏览器与 Xvfb 虚拟显示服务
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget google-chrome-stable
+          sudo apt-get install -y wget google-chrome-stable xvfb
 
       - name: 无缓存强行安装 DrissionPage 及相关依赖
         run: |
@@ -32,9 +32,9 @@ jobs:
         run: |
           python -c "import DrissionPage; print('DrissionPage 安装成功，版本:', DrissionPage.__version__)"
 
-      - name: 运行数据采集脚本
+      - name: 在 Xvfb 虚拟显示环境中运行数据采集脚本
         run: |
-          python bili_auto_tracker.py
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python bili_auto_tracker.py
 
       - name: 自动提交并推送更新后的数据文件
         run: |
