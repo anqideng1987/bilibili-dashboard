@@ -38,4 +38,5 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git add *.xlsx
           git commit -m "Auto-update bilibili report data" || exit 0
+          git pull --rebase origin main
           git push
