@@ -1,4 +1,3 @@
-cat << 'EOF' > app.py
 import streamlit as st
 import pandas as pd
 import glob
@@ -250,4 +249,3 @@ else:
 
     except Exception as e:
         st.error(f"❌ 读取 Excel 数据失败: {e}")
-EOF
