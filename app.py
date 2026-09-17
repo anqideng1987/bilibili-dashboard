@@ -1,17 +1,73 @@
 import os
 import glob
 import pandas as pd
+import datetime
 import streamlit as st
 
+# 页面基础配置
 st.set_page_config(
-    page_title="杨博文 Bilibili 数据看板",
-    page_icon="📺",
+    page_title="杨百万B站数据看板",
+    page_icon="🐰",
     layout="wide"
 )
 
-st.title("📈 哔哩哔哩 · 百万播放冲刺看板")
+# 🐰 注入粉白色主题样式与小兔子奔跑进度条动画
+st.markdown("""
+<style>
+    /* 全局粉白色系微调 */
+    .stApp {
+        background-color: #FFFDFD;
+    }
+    h1, h2, h3 {
+        color: #D46A92 !important;
+    }
+    .metric-card {
+        background-color: #FFF0F5;
+        border: 1px solid #FFD1DC;
+        padding: 15px;
+        border-radius: 12px;
+        text-align: center;
+    }
+    
+    /* 自定义小兔子跑动进度条容器 */
+    .bunny-progress-container {
+        position: relative;
+        width: 100%;
+        background-color: #FCE4EC;
+        border-radius: 15px;
+        height: 24px;
+        margin: 8px 0;
+        overflow: visible;
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+    }
+    
+    /* 进度条填充部分 */
+    .bunny-progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #FFB6C1, #FF69B4);
+        border-radius: 15px;
+        transition: width 0.5s ease;
+    }
+    
+    /* 动态小兔子图标定位 */
+    .bunny-runner {
+        position: absolute;
+        top: -24px;
+        transform: translateX(-50%);
+        font-size: 22px;
+        animation: bunny-bounce 0.6s infinite alternate;
+    }
+    
+    @keyframes bunny-bounce {
+        from { transform: translateX(-50%) translateY(0); }
+        to { transform: translateX(-50%) translateY(-3px); }
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# 侧边栏：控制台
+st.title("🐰 杨百万B站数据看板")
+
+# 侧边栏控制台
 st.sidebar.header("数据控制台")
 if st.sidebar.button("🔄 刷新最新数据缓存"):
     st.cache_data.clear()
@@ -20,94 +76,96 @@ if st.sidebar.button("🔄 刷新最新数据缓存"):
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 @st.cache_data(ttl=180)
-def load_excel_metadata():
-    """只负责寻找最新文件并解析所有 Sheet 的名称和数据，绝对不包含任何 UI 控件"""
-    excel_files = glob.glob(os.path.join(BASE_DIR, "bilibili_*_report.xlsx"))
-    if not excel_files:
-        excel_files = glob.glob(os.path.join(BASE_DIR, "bilibili_*.xlsx"))
-        
-    valid_files = [f for f in excel_files if not os.path.basename(f).startswith("~$")]
+def load_dashboard_data():
+    """精确读取第一个 Sheet（综合分析汇总）下方的明细表格数据"""
+    search_patterns = [
+        os.path.join(BASE_DIR, "bilibili_*_report.xlsx"),
+        os.path.join(BASE_DIR, "bilibili_*.xlsx"),
+        os.path.join(BASE_DIR, "*.xlsx")
+    ]
     
+    excel_files = []
+    for pattern in search_patterns:
+        excel_files.extend(glob.glob(pattern))
+        
+    valid_files = list(set([f for f in excel_files if not os.path.basename(f).startswith("~$")]))
     if not valid_files:
-        return None, None, {}
+        return None, None, pd.DataFrame()
         
     latest_file = max(valid_files, key=os.path.getmtime)
     file_name = os.path.basename(latest_file)
+    file_mtime = datetime.datetime.fromtimestamp(os.path.getmtime(latest_file)).strftime('%Y-%m-%d %H:%M:%S')
     
     try:
-        xls = pd.ExcelFile(latest_file)
-        sheets_data = {}
-        for s_name in xls.sheet_names:
-            sheets_data[s_name] = pd.read_excel(latest_file, sheet_name=s_name)
-        return file_name, xls.sheet_names, sheets_data
+        # 读取第一个 Sheet，跳过前6行说明文字，第7行（index 6）作为列名
+        df = pd.read_excel(latest_file, sheet_name=0, skiprows=6)
+        if not df.empty:
+            df.columns = df.iloc[0]
+            df = df.drop(0).reset_index(drop=True)
+        return file_name, file_mtime, df
     except Exception as e:
-        return file_name, [], {}
+        return file_name, file_mtime, pd.DataFrame()
 
-# 获取数据
-file_name, available_sheets, sheets_data = load_excel_metadata()
+file_name, file_mtime, df = load_dashboard_data()
 
-if not file_name or not available_sheets:
-    st.error("⚠️ 暂未检测到有效的 Excel 数据文件，请确认 GitHub 仓库中是否存在 `bilibili_*_report.xlsx`。")
+if df.empty or "BV号" not in df.columns:
+    st.warning("⚠️ **未能在第一个 Sheet 中检测到有效的视频数据**，请确认 Excel 结构是否包含 `BV号`、`UP主`、`标题`、`总播放` 等列。")
 else:
-    st.sidebar.success(f"📁 数据源: {file_name}")
+    # 数据清洗与格式化
+    df = df.dropna(subset=["BV号"]).copy()
+    df["总播放"] = pd.to_numeric(df["总播放"], errors='coerce').fillna(0)
     
-    # 【UI 控件放在缓存函数外面】侧边栏多时间维度对比切换
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("📋 数据表单选择")
-    
-    default_idx = 0
-    for idx, s_name in enumerate(available_sheets):
-        if "半小时" in s_name or "3." in s_name:
-            default_idx = idx
-            break
-        elif "一小时" in s_name or "2." in s_name:
-            default_idx = idx
-            
-    sheet_name = st.sidebar.selectbox("切换查看的对比维度", available_sheets, index=default_idx)
-    st.sidebar.info(f"📄 当前读取: {sheet_name}")
-    
-    # 提取当前选中的 DataFrame
-    df = sheets_data.get(sheet_name, pd.DataFrame())
+    # 按播放量从高到低排序，并对重复的 BV 号取播放量最高或最新的一条
+    df = df.sort_values(by="总播放", ascending=False).drop_duplicates(subset=["BV号"]).reset_index(drop=True)
 
-    if df.empty:
-        st.warning(f"当前 Sheet `{sheet_name}` 内容为空。")
-    else:
-        # 列名标准化与映射
-        df.columns = [str(c).strip() for c in df.columns]
-        col_mapping = {
-            "bvid": "BV号", "BV": "BV号",
-            "total_views": "总播放量", "views": "总播放量", "播放量": "总播放量", "总播放": "总播放量",
-            "video_title": "标题", "视频标题": "标题", "title": "标题",
-            "up": "UP主", "author": "UP主", "owner": "UP主"
-        }
-        df = df.rename(columns=col_mapping)
+    target_views = 1000000  # 100w 目标
+    total_videos = len(df)
+    cumulative_views = int(df["总播放"].sum())
 
-        if "BV号" in df.columns:
-            # 按采集时间排序，获取每个 BV 号最新的那一条记录
-            if "采集时间" in df.columns:
-                df["采集时间"] = pd.to_datetime(df["采集时间"], errors='coerce')
-                latest_df = df.sort_values("采集时间").groupby("BV号").last().reset_index()
-            else:
-                latest_df = df.groupby("BV号").last().reset_index()
+    # 顶栏核心指标看板
+    col1, col2, col3 = st.columns(3)
+    col1.metric("监控视频总数", f"{total_videos} 个")
+    col2.metric("累计总播放量", f"{cumulative_views:,}")
+    col3.metric("冲刺百万目标进度", f"{(cumulative_views / (total_videos * target_views) * 100):.2f}%" if total_videos > 0 else "0%")
 
-            play_col = "总播放量" if "总播放量" in df.columns else None
-            like_col = "点赞数" if "点赞数" in df.columns else None
-            
-            if play_col:
-                latest_df[play_col] = pd.to_numeric(latest_df[play_col], errors='coerce').fillna(0)
-                total_views = int(latest_df[play_col].sum())
-            else:
-                total_views = 0
-                
-            total_likes = int(pd.to_numeric(latest_df[like_col], errors='coerce').fillna(0).sum()) if like_col and like_col in latest_df.columns else 0
-            total_videos = len(latest_df)
+    st.markdown("---")
+    st.subheader("📊 视频播放量排行及百万冲刺进度")
 
-            col1, col2, col3 = st.columns(3)
-            col1.metric("监控视频总数", f"{total_videos} 个")
-            col2.metric("累计总播放量", f"{total_views:,}")
-            col3.metric("累计总点赞数", f"{total_likes:,}")
+    # 循环渲染每个视频的粉白色精美卡片及小兔子进度条
+    for index, row in df.iterrows():
+        bvid = str(row.get("BV号", ""))
+        title = str(row.get("标题", "未知标题"))
+        up = str(row.get("UP主", "未知UP主"))
+        views = int(row.get("总播放", 0))
+        
+        # 计算单个视频距离100w的百分比 (最高限制100%)
+        pct = min(float(views / target_views) * 100, 100.0)
+        
+        # 渲染卡片
+        with st.container():
+            st.markdown(f"""
+            <div style="background-color: #FFF0F5; border: 1px solid #FFD1DC; padding: 16px; border-radius: 12px; margin-bottom: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <div>
+                        <span style="background-color: #FF69B4; color: white; padding: 2px 8px; border-radius: 6px; font-weight: bold; font-size: 13px;"># {index + 1}</span>
+                        <b style="font-size: 16px; color: #333333; margin-left: 8px;">{title}</b>
+                    </div>
+                    <div style="text-align: right;">
+                        <span style="color: #888888; font-size: 13px;">UP主: <b>{up}</b> | BV号: <a href="https://www.bilibili.com/video/{bvid}" target="_blank" style="color: #FF69B4; text-decoration: none;">{bvid}</a></span>
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 14px; color: #555555; margin-bottom: 4px;">
+                    <span>当前播放量: <b style="color: #D46A92; font-size: 16px;">{views:,}</b> / 1,000,000</span>
+                    <span><b>{pct:.1f}%</b></span>
+                </div>
+                <!-- 小兔子奔跑进度条 -->
+                <div class="bunny-progress-container">
+                    <div class="bunny-progress-bar" style="width: {pct}%;"></div>
+                    <div class="bunny-runner" style="left: {max(pct, 3.0)}%;">🐰</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
-            st.subheader(f"📊 最新视频明细数据 ({sheet_name})")
-            st.dataframe(latest_df, use_container_width=True)
-        else:
-            st.warning(f"数据表中未找到 `BV号` 列，当前可用列名为：`{list(df.columns)}`")
+# 最下面显示数据更新时间
+st.markdown("---")
+st.markdown(f"<div style='text-align: center; color: #888888; font-size: 13px;'>✨ 数据源文件: {file_name} &nbsp;|&nbsp; 🕒 最后的更新时间: <b>{file_mtime}</b> ✨</div>", unsafe_allow_html=True)
