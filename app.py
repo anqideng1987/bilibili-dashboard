@@ -33,7 +33,7 @@ st.markdown("""
 st.markdown("""
     <div class="bili-header">
         <div class="bili-title">🐰 杨百万B站数据看板</div>
-        <div class="bili-subtitle">✨ 冲刺 100w 目标 | 小兔子实时跟随粉色里程碑进度条</div>
+        <div class="bili-subtitle"> 助力冲刺 100w 目标 </div>
     </div>
 """, unsafe_allow_html=True)
 
