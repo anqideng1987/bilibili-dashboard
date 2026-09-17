@@ -1,0 +1,6 @@
+cd /Users/baobao/Desktop/bilibili
+python3 bili_data.py --input input.txt --interval 60
+
+
+cd ~/Desktop/bilibili
+python3 bili_auto_tracker.py
