@@ -68,21 +68,22 @@ else:
     try:
         xls = pd.ExcelFile(latest_file)
         
-        # 寻找正确的 Sheet
+        # 优先选择含完整明细数据的 Sheet
         if "3. 半小时间隔明细" in xls.sheet_names:
-            target_sheet = "3. 半小时间隔明细"
+            df = pd.read_excel(latest_file, sheet_name="3. 半小时间隔明细")
+        elif "2. 一小时间隔明细" in xls.sheet_names:
+            df = pd.read_excel(latest_file, sheet_name="2. 一小时间隔明细")
         elif "1. 综合分析汇总" in xls.sheet_names:
-            target_sheet = "1. 综合分析汇总"
+            # “1. 综合分析汇总” 前 7 行是指标解读，跳过前 7 行读取
+            df = pd.read_excel(latest_file, sheet_name="1. 综合分析汇总", skiprows=7)
         else:
-            target_sheet = xls.sheet_names[0]
+            df = pd.read_excel(latest_file, sheet_name=xls.sheet_names[0])
             
-        df = pd.read_excel(latest_file, sheet_name=target_sheet)
-        
         if not df.empty:
-            # 统一转换列名为字符串并去掉多余空格
+            # 清理表头空格
             df.columns = [str(c).strip() for c in df.columns]
             
-            # 智能映射常见列名别名
+            # 智能映射常见列名
             col_mapping = {
                 "bvid": "BV号", "BV": "BV号", "bv号": "BV号",
                 "total_views": "总播放量", "views": "总播放量", "播放量": "总播放量", "总播放": "总播放量",
@@ -94,7 +95,10 @@ else:
             if "BV号" not in df.columns:
                 st.error(f"❌ 读取成功但未找到 `BV号` 列，当前表格的列名为: `{list(df.columns)}`")
             else:
-                # 按时间排序取每个视频的最后一条记录
+                # 过滤掉可能存在的空行
+                df = df.dropna(subset=["BV号"])
+                
+                # 按时间获取每个 BV 号的最新记录
                 if "采集时间" in df.columns:
                     df["采集时间"] = pd.to_datetime(df["采集时间"], errors='coerce')
                     latest_df = df.sort_values("采集时间").groupby("BV号").last().reset_index()
