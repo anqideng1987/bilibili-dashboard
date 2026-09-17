@@ -21,8 +21,12 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 @st.cache_data(ttl=180)
 def load_latest_excel():
-    # 1. 匹配所有带日期的 bilibili_*_report.xlsx 或 bilibili_*.xlsx 文件
-    excel_files = glob.glob(os.path.join(BASE_DIR, "bilibili_*.xlsx")) + glob.glob(os.path.join(BASE_DIR, "*.xlsx"))
+    # 【修复 1】精准匹配带日期的 crawler 报表，彻底排除杂质或旧模板文件
+    excel_files = glob.glob(os.path.join(BASE_DIR, "bilibili_*_report.xlsx"))
+    # 如果没找到带 report 的，再退一步找 bilibili_ 开头的文件，排除根目录下的纯 *.xlsx 泛匹配
+    if not excel_files:
+        excel_files = glob.glob(os.path.join(BASE_DIR, "bilibili_*.xlsx"))
+        
     # 排除临时文件 ~$
     valid_files = [f for f in excel_files if not os.path.basename(f).startswith("~$")]
     
@@ -35,15 +39,22 @@ def load_latest_excel():
     
     try:
         xls = pd.ExcelFile(latest_file)
-        # 寻找优先 Sheet
-        if "3. 半小时间隔明细" in xls.sheet_names:
-            target_sheet = "3. 半小时间隔明细"
-        elif "2. 一小时间隔明细" in xls.sheet_names:
-            target_sheet = "2. 一小时间隔明细"
-        elif "1. 综合分析汇总" in xls.sheet_names:
-            target_sheet = "1. 综合分析汇总"
-        else:
-            target_sheet = xls.sheet_names[0]
+        
+        # 【修复 2】支持多 Sheet 选择（如半小时、一小时明细对比）
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("📋 数据表单选择")
+        available_sheets = xls.sheet_names
+        
+        # 默认优先选择用户关心的半小时或一小时间隔明细
+        default_idx = 0
+        for idx, s_name in enumerate(available_sheets):
+            if "半小时" in s_name or "3." in s_name:
+                default_idx = idx
+                break
+            elif "一小时" in s_name or "2." in s_name:
+                default_idx = idx
+                
+        target_sheet = st.sidebar.selectbox("切换查看的对比维度", available_sheets, index=default_idx)
             
         df = pd.read_excel(latest_file, sheet_name=target_sheet)
         return df, file_name, target_sheet
@@ -58,7 +69,7 @@ if df.empty:
 else:
     st.sidebar.success(f"📁 数据源: {file_name}")
     if sheet_name:
-        st.sidebar.info(f"📄 当前读取 Sheet: {sheet_name}")
+        st.sidebar.info(f"📄 当前读取: {sheet_name}")
         
     # 列名标准化与映射
     df.columns = [str(c).strip() for c in df.columns]
@@ -95,7 +106,7 @@ else:
         col2.metric("累计总播放量", f"{total_views:,}")
         col3.metric("累计总点赞数", f"{total_likes:,}")
 
-        st.subheader("📊 最新视频明细数据")
+        st.subheader(f"📊 最新视频明细数据 ({sheet_name})")
         st.dataframe(latest_df, use_container_width=True)
     else:
         st.warning(f"数据表中未找到 `BV号` 列，当前可用列名为：`{list(df.columns)}`")
