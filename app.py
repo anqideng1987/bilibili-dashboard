@@ -1,3 +1,4 @@
+cat << 'EOF' > app.py
 import streamlit as st
 import pandas as pd
 import glob
@@ -110,6 +111,51 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# 💡 提前定义渲染视频卡片的函数，确保作用域正确
+def render_video_card(idx, row, target_views):
+    """渲染单张带 10w 里程碑节点的视频紧凑卡片"""
+    bvid = str(row.get("BV号", "未知BV"))
+    title = str(row.get("标题", "未知标题"))
+    views = int(row.get("总播放量", 0))
+    owner = str(row.get("UP主", "未知UP主"))
+    
+    progress = min(views / target_views, 1.0)
+    percent = min(round((views / target_views) * 100, 2), 100.0)
+    
+    rank_icon = "🥇" if idx == 0 else ("🥈" if idx == 1 else ("🥉" if idx == 2 else f"#{idx+1}"))
+    
+    st.markdown(f"""
+        <div class="bili-card">
+            <div class="video-title" title="{title}">{rank_icon} {title}</div>
+            <div>
+                <span class="bv-badge"><a href="https://www.bilibili.com/video/{bvid}" target="_blank" style="color: #D46A92; text-decoration: none;">{bvid}</a></span>
+                <span style="font-size:12px; color:#757575; margin-left:6px;">UP主：{owner}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+                <span style="font-size: 13px; color: #555555;">播放: <b style="color: #D46A92;">{views:,}</b></span>
+                <span style="font-size: 12px; color: #D46A92; font-weight: bold;">进度: {percent}%</span>
+            </div>
+            
+            <!-- 每 10w 播放量一个节点的里程碑进度条 -->
+            <div class="milestone-container">
+                <div class="milestone-bar" style="width: {percent}%;"></div>
+                <div class="milestone-ticks">
+                    <div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div>
+                    <div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div>
+                </div>
+                <div class="bunny-runner" style="left: {max(percent, 3.0)}%;">🐰</div>
+            </div>
+            <div class="milestone-labels">
+                <span>0w</span>
+                <span>30w</span>
+                <span>60w</span>
+                <span>90w</span>
+                <span>100w</span>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+
 st.markdown("""
     <div class="bili-header">
         <div class="bili-title">🐰 杨百万B站数据看板</div>
@@ -183,18 +229,16 @@ else:
 
                 target_views = 1_000_000  # 100w 目标
 
-                # 💡 两列并排布局：使用 st.columns(2) 让卡片更紧凑
+                # 两列并排布局
                 videos_list = list(latest_df.iterrows())
                 for i in range(0, len(videos_list), 2):
                     col_left, col_right = st.columns(2)
                     
-                    # 左侧视频卡片
                     with col_left:
                         if i < len(videos_list):
                             idx, row = videos_list[i]
                             render_video_card(idx, row, target_views)
                             
-                    # 右侧视频卡片
                     with col_right:
                         if i + 1 < len(videos_list):
                             idx, row = videos_list[i + 1]
@@ -206,52 +250,4 @@ else:
 
     except Exception as e:
         st.error(f"❌ 读取 Excel 数据失败: {e}")
-
-
-def render_video_card(idx, row, target_views):
-    """渲染单张带 10w 里程碑节点的视频紧凑卡片"""
-    bvid = str(row.get("BV号", "未知BV"))
-    title = str(row.get("标题", "未知标题"))
-    views = int(row.get("总播放量", 0))
-    owner = str(row.get("UP主", "未知UP主"))
-    
-    progress = min(views / target_views, 1.0)
-    gap = max(target_views - views, 0)
-    percent = min(round((views / target_views) * 100, 2), 100.0)
-    
-    # 计算当前所处的 10w 里程碑阶梯（例如 34w 处于 30w~40w 之间）
-    current_milestone = (views // 100_000) * 100_000
-    next_milestone = min(current_milestone + 100_000, target_views)
-    
-    rank_icon = "🥇" if idx == 0 else ("🥈" if idx == 1 else ("🥉" if idx == 2 else f"#{idx+1}"))
-    
-    st.markdown(f"""
-        <div class="bili-card">
-            <div class="video-title" title="{title}">{rank_icon} {title}</div>
-            <div>
-                <span class="bv-badge"><a href="https://www.bilibili.com/video/{bvid}" target="_blank" style="color: #D46A92; text-decoration: none;">{bvid}</a></span>
-                <span style="font-size:12px; color:#757575; margin-left:6px;">UP主：{owner}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
-                <span style="font-size: 13px; color: #555555;">播放: <b style="color: #D46A92;">{views:,}</b></span>
-                <span style="font-size: 12px; color: #D46A92; font-weight: bold;">进度: {percent}%</span>
-            </div>
-            
-            <!-- 每 10w 播放量一个节点的里程碑进度条 -->
-            <div class="milestone-container">
-                <div class="milestone-bar" style="width: {percent}%;"></div>
-                <div class="milestone-ticks">
-                    <div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div>
-                    <div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div>
-                </div>
-                <div class="bunny-runner" style="left: {max(percent, 3.0)}%;">🐰</div>
-            </div>
-            <div class="milestone-labels">
-                <span>0w</span>
-                <span>30w</span>
-                <span>60w</span>
-                <span>90w</span>
-                <span>100w</span>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+EOF
