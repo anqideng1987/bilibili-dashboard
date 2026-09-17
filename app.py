@@ -4,6 +4,7 @@ import glob
 import os
 import re
 import datetime
+import textwrap
 
 # 页面基础配置，看板名称：杨百万B站数据看板
 st.set_page_config(
@@ -13,7 +14,7 @@ st.set_page_config(
 )
 
 # 注入粉白色主题、双列紧凑卡片网格以及带有 10w 里程碑节点的兔子跑动进度条动画
-st.markdown("""
+st.markdown(textwrap.dedent("""
     <style>
     .stApp { background-color: #FFFDFD; }
     .bili-header {
@@ -82,7 +83,6 @@ st.markdown("""
         from { transform: translateX(-50%) translateY(0); }
         to { transform: translateX(-50%) translateY(-3px); }
     }
-    /* 10w 刻度线标记 */
     .milestone-ticks {
         position: absolute;
         top: 0;
@@ -108,7 +108,7 @@ st.markdown("""
         margin-top: 2px;
     }
     </style>
-""", unsafe_allow_html=True)
+"""), unsafe_allow_html=True)
 
 # 💡 定义渲染单张双列视频卡片的函数
 def render_video_card(idx, row, target_views):
@@ -120,7 +120,7 @@ def render_video_card(idx, row, target_views):
     percent = min(round((views / target_views) * 100, 2), 100.0)
     rank_icon = "🥇" if idx == 0 else ("🥈" if idx == 1 else ("🥉" if idx == 2 else f"#{idx+1}"))
     
-    st.markdown(f"""
+    card_html = textwrap.dedent(f"""
         <div class="bili-card">
             <div class="video-title" title="{title}">{rank_icon} {title}</div>
             <div>
@@ -152,15 +152,16 @@ def render_video_card(idx, row, target_views):
                 <span>0w</span><span>20w</span><span>40w</span><span>60w</span><span>80w</span><span>100w</span>
             </div>
         </div>
-    """, unsafe_allow_html=True)
+    """)
+    st.markdown(card_html, unsafe_allow_html=True)
 
 
-st.markdown("""
+st.markdown(textwrap.dedent("""
     <div class="bili-header">
         <div class="bili-title">🐰 杨百万B站数据看板</div>
-        <div class="bili-subtitle">✨ 双列紧凑网格布局 | 每 10w 播放量一个里程碑节点 | 冲刺 100w 目标</div>
+        <div class="bili-subtitle">✨ 冲刺 100w 目标！</div>
     </div>
-""", unsafe_allow_html=True)
+"""), unsafe_allow_html=True)
 
 # 获取所有 xlsx / xls 文件
 all_excel_files = glob.glob("*.xlsx") + glob.glob("*.xls")
@@ -209,7 +210,6 @@ else:
 
                 target_views = 1_000_000  # 100w 目标
 
-                # 📌 核心修改：两列并排网格循环渲染视频卡片
                 videos_list = list(latest_df.iterrows())
                 for i in range(0, len(videos_list), 2):
                     col_left, col_right = st.columns(2)
