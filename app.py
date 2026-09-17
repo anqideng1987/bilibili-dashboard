@@ -71,7 +71,8 @@ if not valid_excel_files:
     st.warning("🌸 暂未找到任何 .xlsx 数据文件，请将表格文件提交至仓库根目录。")
 else:
     # 按照文件名中的日期（YYYYMMDD）提取最近日期的文件
-    latest_file = sorted(valid_excel_files)[-1]
+    date_files = [f for f in valid_excel_files if re.search(r'\d{8}', f)]
+    latest_file = sorted(date_files, key=lambda x: re.search(r'\d{8}', x).group())[-1] if date_files else sorted(valid_excel_files)[-1]
     
     st.info(f"📊 当前自动加载最新日期数据源：`{latest_file}`")
     
