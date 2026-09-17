@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import glob
 import os
+import re
 
 st.set_page_config(
     page_title="哔哩哔哩 · 百万播放冲刺看板",
@@ -51,19 +52,28 @@ st.markdown("""
 st.markdown("""
     <div class="bili-header">
         <div class="bili-title">📺 哔哩哔哩 · 目标百万播放冲刺看板</div>
-        <div class="bili-subtitle">✨ 实时追踪视频播放进度 | 自动适配各种表格格式</div>
+        <div class="bili-subtitle">✨ 实时追踪视频播放进度 | 视频列表按播放量降序排列</div>
     </div>
 """, unsafe_allow_html=True)
 
+# 获取所有 xlsx / xls 文件（排除隐藏与缓存文件）
 all_excel_files = glob.glob("*.xlsx") + glob.glob("*.xls")
 valid_excel_files = [f for f in all_excel_files if not os.path.basename(f).startswith("~$")]
+
+def extract_date_from_filename(filename):
+    """从文件名中提取 YYYYMMDD 数字，例如 bilibili_20260917_report.xlsx -> 20260917"""
+    match = re.search(r'(\d{8})', filename)
+    if match:
+        return int(match.group(1))
+    return int(os.path.getmtime(filename))
 
 if not valid_excel_files:
     st.warning("🌸 暂未找到任何 .xlsx 数据文件，请将表格文件提交至仓库根目录。")
 else:
-    latest_file = max(valid_excel_files, key=os.path.getmtime)
-    mtime_str = pd.to_datetime(os.path.getmtime(latest_file), unit='s').strftime('%Y-%m-%d %H:%M:%S')
-    st.info(f"📊 当前自动加载最新数据源：`{latest_file}`（更新时间: {mtime_str}）")
+    # 按照文件名中的日期（YYYYMMDD）提取最近日期的文件
+    latest_file = max(valid_excel_files, key=extract_date_from_filename)
+    
+    st.info(f"📊 当前自动加载最新日期数据源：`{latest_file}`")
     
     try:
         xls = pd.ExcelFile(latest_file)
@@ -74,16 +84,13 @@ else:
         elif "2. 一小时间隔明细" in xls.sheet_names:
             df = pd.read_excel(latest_file, sheet_name="2. 一小时间隔明细")
         elif "1. 综合分析汇总" in xls.sheet_names:
-            # “1. 综合分析汇总” 前 7 行是指标解读，跳过前 7 行读取
             df = pd.read_excel(latest_file, sheet_name="1. 综合分析汇总", skiprows=7)
         else:
             df = pd.read_excel(latest_file, sheet_name=xls.sheet_names[0])
             
         if not df.empty:
-            # 清理表头空格
             df.columns = [str(c).strip() for c in df.columns]
             
-            # 智能映射常见列名
             col_mapping = {
                 "bvid": "BV号", "BV": "BV号", "bv号": "BV号",
                 "total_views": "总播放量", "views": "总播放量", "播放量": "总播放量", "总播放": "总播放量",
@@ -95,7 +102,6 @@ else:
             if "BV号" not in df.columns:
                 st.error(f"❌ 读取成功但未找到 `BV号` 列，当前表格的列名为: `{list(df.columns)}`")
             else:
-                # 过滤掉可能存在的空行
                 df = df.dropna(subset=["BV号"])
                 
                 # 按时间获取每个 BV 号的最新记录
@@ -105,14 +111,17 @@ else:
                 else:
                     latest_df = df.groupby("BV号").last().reset_index()
 
-                total_videos = len(latest_df)
-                
-                # 提取播放量
+                # 转换总播放量为数值格式，防止排序异常
                 if "总播放量" in latest_df.columns:
                     latest_df["总播放量"] = pd.to_numeric(latest_df["总播放量"], errors='coerce').fillna(0)
-                    total_views = int(latest_df["总播放量"].sum())
                 else:
-                    total_views = 0
+                    latest_df["总播放量"] = 0
+
+                # 💡 核心修改：将视频按总播放量从高到低（降序）排序
+                latest_df = latest_df.sort_values(by="总播放量", ascending=False).reset_index(drop=True)
+
+                total_videos = len(latest_df)
+                total_views = int(latest_df["总播放量"].sum())
                 
                 c1, c2 = st.columns(2)
                 with c1:
@@ -123,7 +132,8 @@ else:
                 st.write("")
                 st.write("")
 
-                for _, row in latest_df.iterrows():
+                # 遍历显示按播放量排序后的视频列表
+                for idx, row in latest_df.iterrows():
                     bvid = str(row.get("BV号", "未知BV"))
                     title = str(row.get("标题", "未知标题"))
                     views = int(row.get("总播放量", 0))
@@ -134,9 +144,12 @@ else:
                     gap = max(target - views, 0)
                     percent = round(progress * 100, 2)
                     
+                    # 添加排名 Icon
+                    rank_icon = "🥇" if idx == 0 else ("🥈" if idx == 1 else ("🥉" if idx == 2 else f"#{idx+1}"))
+                    
                     st.markdown(f"""
                         <div class="bili-card">
-                            <div class="video-title">🎬 {title}</div>
+                            <div class="video-title">{rank_icon} {title}</div>
                             <div>
                                 <span class="bv-badge">{bvid}</span>
                                 <span style="font-size:13px; color:#757575; margin-left:8px;">UP主：{owner}</span>
