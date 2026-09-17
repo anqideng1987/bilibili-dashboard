@@ -1,8 +1,11 @@
 import os
 import time
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from DrissionPage import ChromiumPage, ChromiumOptions
+
+# 设置新加坡时区 (UTC+8)
+SGT = timezone(timedelta(hours=8))
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 BV_FILE = os.path.join(BASE_DIR, "bv_list.txt")
@@ -14,90 +17,107 @@ def load_bv_list():
     with open(BV_FILE, "r", encoding="utf-8") as f:
         return [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
-def get_bilibili_data(bv_list):
-    if not bv_list:
-        print("⚠️ 未读取到任何 BV 号。")
-        return pd.DataFrame()
-
+def init_drission_page():
+    """初始化适配 Xvfb 虚拟环境的 ChromiumPage"""
     co = ChromiumOptions()
-    co.set_argument('--headless=new')
-    co.set_argument('--no-sandbox')
-    co.set_argument('--disable-gpu')
-    co.set_argument('--disable-dev-shm-usage')
+
+    # 1. 在 Xvfb 中以“有头/真实屏幕”模式运行，避免使用 headless 被反爬识别
+    # co.set_argument('--headless=new')  <-- Xvfb 环境下显式注释掉
+
+    # 2. Linux 容器环境必备参数
+    co.set_argument('--no-sandbox')                  # 禁用沙盒权限限制
+    co.set_argument('--disable-dev-shm-usage')       # 禁用 /dev/shm 内存限制，防止内存溢出崩溃
+    co.set_argument('--disable-gpu')                 # 禁用 GPU 硬件加速
+    co.set_argument('--window-size=1920,1080')       # 设置标准屏幕分辨率
+
+    # 3. 反爬虫与浏览器特征伪装
+    co.set_argument('--disable-blink-features=AutomationControlled')
     co.set_user_agent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36')
 
+    # 4. 指定系统中 Chrome 浏览器的可执行路径
     chrome_paths = ['/usr/bin/google-chrome', '/usr/bin/chromium-browser', '/usr/bin/chromium']
-    for cp in chrome_paths:
-        if os.path.exists(cp):
-            co.set_browser_path(cp)
+    for path in chrome_paths:
+        if os.path.exists(path):
+            co.set_browser_path(path)
             break
 
-    page = ChromiumPage(co)
-    data_list = []
-    
+    return ChromiumPage(co)
+
+def fetch_bilibili_data_dp(page, bvid):
+    url = f"https://www.bilibili.com/video/{bvid}"
+    current_time_sgt = datetime.now(SGT).strftime("%Y-%m-%d %H:%M:%S")
+
     try:
-        page.get("https://www.bilibili.com/")
-        time.sleep(2)
+        page.get(url)
+        # 等待关键变量渲染完成
+        page.wait.load_start()
+        time.sleep(1.5)
 
-        for bvid in bv_list:
-            url = f"https://www.bilibili.com/video/{bvid}"
-            print(f"正在抓取: {bvid} ...")
-            
-            try:
-                page.get(url)
-                time.sleep(2.5)
-                
-                res = page.run_js("""
-                    let data = window.__INITIAL_STATE__ || {};
-                    let videoData = data.videoData || {};
-                    let stat = videoData.stat || {};
-                    return {
-                        title: videoData.title || document.title || "",
-                        owner: (videoData.owner && videoData.owner.name) || "",
-                        view: stat.view || 0,
-                        like: stat.like || 0,
-                        coin: stat.coin || 0,
-                        favorite: stat.favorite || 0,
-                        share: stat.share || 0,
-                        reply: stat.reply || 0,
-                        danmaku: stat.danmaku || 0
-                    };
-                """)
-                
-                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                data_list.append({
-                    "采集时间": now_str,
-                    "BV号": bvid,
-                    "标题": res.get("title", ""),
-                    "UP主": res.get("owner", ""),
-                    "播放量": res.get("view", 0),
-                    "点赞数": res.get("like", 0),
-                    "投币数": res.get("coin", 0),
-                    "收藏数": res.get("favorite", 0),
-                    "分享数": res.get("share", 0),
-                    "评论数": res.get("reply", 0),
-                    "弹幕数": res.get("danmaku", 0)
-                })
-                print(f"  └─ ✅ 成功: 《{res.get('title')}》| 播放量: {res.get('view')}")
-            except Exception as e:
-                print(f"  └─ ❌ 抓取失败 {bvid}: {e}")
-    finally:
-        page.quit()
+        # 从页面全局变量中提取结构化数据
+        state = page.run_js('return window.__INITIAL_STATE__ || {};')
+        if state and 'videoData' in state:
+            video_data = state.get('videoData', {})
+            stat = video_data.get('stat', {})
+            owner = video_data.get('owner', {})
 
-    return pd.DataFrame(data_list)
+            title = video_data.get('title', '')
+            view_count = stat.get('view', 0)
+            print(f"  └─ ✅ 成功: 《{title}》| 播放量: {view_count}")
+
+            return {
+                "采集时间": current_time_sgt,
+                "BV号": bvid,
+                "标题": title,
+                "UP主": owner.get('name', ''),
+                "播放量": view_count,
+                "弹幕数": stat.get('danmaku', 0),
+                "回复数": stat.get('reply', 0),
+                "收藏数": stat.get('favorite', 0),
+                "投币数": stat.get('coin', 0),
+                "点赞数": stat.get('like', 0),
+                "分享数": stat.get('share', 0),
+                "状态": "成功"
+            }
+        else:
+            print(f"⚠️ [{bvid}] 未能在 window.__INITIAL_STATE__ 中查找到数据")
+    except Exception as e:
+        print(f"❌ [{bvid}] 请求异常: {e}")
+
+    return {
+        "采集时间": current_time_sgt,
+        "BV号": bvid,
+        "标题": "获取失败",
+        "UP主": "-",
+        "播放量": 0, "弹幕数": 0, "回复数": 0, "收藏数": 0, "投币数": 0, "点赞数": 0, "分享数": 0,
+        "状态": "失败"
+    }
 
 def run_once():
-    print(f"🚀 [DrissionPage 模式] 开始采集数据: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    now_sgt = datetime.now(SGT)
+    print(f"🚀 [DrissionPage + Xvfb 模式] 开始采集数据: {now_sgt.strftime('%Y-%m-%d %H:%M:%S')}")
+
     bvs = load_bv_list()
     if not bvs:
         print("❌ BV 列表为空，退出。")
         return
 
-    df = get_bilibili_data(bvs)
+    page = init_drission_page()
+    data_list = []
+
+    try:
+        for bvid in bvs:
+            print(f"正在抓取: {bvid} ...")
+            item = fetch_bilibili_data_dp(page, bvid)
+            data_list.append(item)
+            time.sleep(1)
+    finally:
+        page.quit()
+
+    df = pd.DataFrame(data_list)
     if not df.empty:
-        today_str = datetime.now().strftime("%Y%m%d")
-        excel_path = os.path.join(BASE_DIR, f"bilibili_{today_str}_report.xlsx")
-        
+        date_str = now_sgt.strftime("%Y%m%d")
+        excel_path = os.path.join(BASE_DIR, f"bilibili_{date_str}_report.xlsx")
+
         if os.path.exists(excel_path):
             try:
                 old_df = pd.read_excel(excel_path)
