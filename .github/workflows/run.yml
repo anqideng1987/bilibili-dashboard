@@ -2,8 +2,8 @@ name: Auto Bilibili Data Crawler
 
 on:
   schedule:
-    # 每半小时运行一次（对应新加坡时间的每一个整点和半点）
-    - cron: '0,30 * * * *'
+    # 错开全局整点高峰，在每小时的 05 分 和 35 分触发
+    - cron: '5,35 * * * *'
   workflow_dispatch: # 依然保留手动触发按钮
 
 jobs:
