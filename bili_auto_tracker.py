@@ -17,8 +17,6 @@ def load_bv_list():
 
 def init_drission_page():
     co = ChromiumOptions()
-
-    # 显式开启 Linux 容器静默无头模式，防止与 Xvfb 抢夺 GUI 交互阻塞
     co.set_argument('--headless=new')
     co.set_argument('--no-sandbox')
     co.set_argument('--disable-dev-shm-usage')
@@ -67,8 +65,6 @@ def fetch_bilibili_data_dp(page, bvid):
                 "分享数": stat.get('share', 0),
                 "状态": "成功"
             }
-        else:
-            print(f"⚠️ [{bvid}] 未能在 window.__INITIAL_STATE__ 中查找到数据")
     except Exception as e:
         print(f"❌ [{bvid}] 请求异常: {e}")
 
@@ -80,6 +76,33 @@ def fetch_bilibili_data_dp(page, bvid):
         "播放量": 0, "弹幕数": 0, "回复数": 0, "收藏数": 0, "投币数": 0, "点赞数": 0, "分享数": 0,
         "状态": "失败"
     }
+
+def save_to_excel(df_new, excel_path):
+    if os.path.exists(excel_path):
+        try:
+            raw_df = pd.read_excel(excel_path, header=None)
+            header_idx = None
+            for idx, row in raw_df.iterrows():
+                row_str = " ".join([str(x) for x in row.values])
+                if "BV号" in row_str and "采集时间" in row_str:
+                    header_idx = idx
+                    break
+
+            if header_idx is not None:
+                meta_rows = raw_df.iloc[:header_idx]
+                data_df = pd.read_excel(excel_path, skiprows=header_idx)
+                updated_data_df = pd.concat([data_df, df_new], ignore_index=True)
+                
+                with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
+                    meta_rows.to_excel(writer, index=False, header=False, sheet_name='Sheet1')
+                    updated_data_df.to_excel(writer, index=False, startrow=header_idx, sheet_name='Sheet1')
+                print(f"✅ 成功兼容原有表头格式并追加数据至 {excel_path}")
+                return
+        except Exception as e:
+            print(f"⚠️ 兼容追加写入失败，降级为覆盖保存: {e}")
+
+    df_new.to_excel(excel_path, index=False)
+    print(f"✅ 数据采集完成，已保存至 {excel_path}")
 
 def run_once():
     now_sgt = datetime.now(SGT)
@@ -102,20 +125,11 @@ def run_once():
     finally:
         page.quit()
 
-    df = pd.DataFrame(data_list)
-    if not df.empty:
+    df_new = pd.DataFrame(data_list)
+    if not df_new.empty:
         date_str = now_sgt.strftime("%Y%m%d")
         excel_path = os.path.join(BASE_DIR, f"bilibili_{date_str}_report.xlsx")
-
-        if os.path.exists(excel_path):
-            try:
-                old_df = pd.read_excel(excel_path)
-                df = pd.concat([old_df, df], ignore_index=True)
-            except Exception as e:
-                print(f"读取原有 Excel 异常: {e}")
-
-        df.to_excel(excel_path, index=False)
-        print(f"✅ 数据采集完成，已保存至 {excel_path}")
+        save_to_excel(df_new, excel_path)
 
 if __name__ == "__main__":
     run_once()
