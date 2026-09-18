@@ -24,6 +24,7 @@ def init_driver():
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36')
     
+    # 自动适配 Ubuntu / Linux 系统的 Chrome 路径
     chrome_bin = '/usr/bin/google-chrome'
     if os.path.exists(chrome_bin):
         options.binary_location = chrome_bin
