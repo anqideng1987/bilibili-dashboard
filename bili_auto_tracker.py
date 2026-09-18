@@ -45,7 +45,7 @@ def get_bilibili_data(bv_list):
 
         for bvid in bv_list:
             url = f"https://www.bilibili.com/video/{bvid}"
-            print(f"正在抓取 (Selenium 模拟浏览器): {bvid} ...")
+            print(f"正在抓取 (Selenium 模式): {bvid} ...")
 
             try:
                 driver.get(url)
@@ -67,7 +67,7 @@ def get_bilibili_data(bv_list):
                         "BV号": bvid,
                         "标题": title,
                         "UP主": owner,
-                        "播放量": view,
+                        "总播放量": view,
                         "点赞数": stat.get("like", 0),
                         "投币数": stat.get("coin", 0),
                         "收藏数": stat.get("favorite", 0),
